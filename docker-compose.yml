@@ -1,0 +1,86 @@
+version: '3'
+
+services:
+  wireguard:
+    image: linuxserver/wireguard
+    container_name: marauder_vpn
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - SERVERURL=auto
+      - SERVERPORT=51820
+      - PEERS=0
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.0.0.0/24
+      - ALLOWEDIPS=0.0.0.0/0
+    volumes:
+      - ./config/wireguard:/config
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "51820:51820/udp"
+    restart: unless-stopped
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+  
+  #secure tunnel encryption, alternative is obs4
+  obfuscation:
+    image: shadowsocks/shadowsocks-libev
+    container_name: marauder_obfs
+    ports:
+      - "8388:8388/tcp"
+      - "8388:8388/udp"
+    environment:
+      - METHOD=chacha20-ietf-poly1305
+      - PASSWORD=marauder_ss_password  
+    volumes:
+      - ./config/shadowsocks:/etc/shadowsocks-libev
+    restart: unless-stopped
+    depends_on:
+      - wireguard
+      
+  dns-over-https:
+    image: satishweb/doh-server
+    container_name: marauder_doh
+    ports:
+      - "127.0.0.1:8053:8053/udp"
+    environment:
+      - UPSTREAM_DNS_SERVER=1.1.1.1,1.0.0.1 #dns leak prevention
+    restart: unless-stopped
+      
+  ui:
+    build: ./ui
+    container_name: marauder_ui
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./config:/config
+      - ./scripts:/scripts
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://localhost:3001
+    restart: unless-stopped
+    depends_on:
+      - wireguard
+      - obfuscation
+      
+  api:
+    build: ./api
+    container_name: marauder_api
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ./config:/config
+      - ./scripts:/scripts
+    environment:
+      - NODE_ENV=production
+      - WG_CONFIG_DIR=/config/wireguard
+    restart: unless-stopped
+    depends_on:
+      - wireguard
+    cap_add:
+      - NET_ADMIN
