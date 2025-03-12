@@ -5,7 +5,6 @@ CONFIG_DIR="/config/wireguard"
 SERVER_DIR="${CONFIG_DIR}/server"
 WG_INTERFACE="wg0"
 
-
 mkdir -p ${SERVER_DIR}
 
 # server key gen, stored in config
